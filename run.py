@@ -1,4 +1,6 @@
 # %%
+from functools import cached_property
+
 import pydantic
 
 from pydantic_to_flat_dict_and_back.src import (
@@ -8,67 +10,59 @@ from pydantic_to_flat_dict_and_back.src import (
 )
 
 
-class A(pydantic.BaseModel):
-    value: float
-    name: str
+class GenerateSignalParams(pydantic.BaseModel):
+    T_celsius: float
+    generation_frequency: int
+    T_total: float
+    diameter: float
+    lambda_laser: float
+    n_medium: float
+    variance_fluctuations: float
+    offset: float
     seed: int
 
-    model_config = pydantic.ConfigDict(extra="ignore")
+    model_config = pydantic.ConfigDict(extra="ignore", frozen=True)
 
 
-class AA(pydantic.BaseModel):
-    valueA: float
-    nameA: str
-    seedA: int
+class AnalogToDigitalConverter(pydantic.BaseModel):
+    v_min: float
+    v_max: float
+    n_levels: int  # example 2**16
+    sampling_frequency: int  # example 50_000 kHz
+    model_config = pydantic.ConfigDict(frozen=True, extra="ignore")
 
-    model_config = pydantic.ConfigDict(extra="ignore")
-
-
-class B(pydantic.BaseModel):
-    value: float
-    name: str
-    a: A
-
-    model_config = pydantic.ConfigDict(extra="ignore")
+    @cached_property
+    def delta_v(self) -> float:
+        return (self.v_max - self.v_min) / self.n_levels
 
 
-class C(pydantic.BaseModel):
-    value: float
-    name: str
-    b: B
+class ParamsAcquisition(pydantic.BaseModel):
+    params_gen: GenerateSignalParams
+    adc: AnalogToDigitalConverter
 
-    model_config = pydantic.ConfigDict(extra="ignore")
-
-
-c = C(value=1.0, name="test", b=B(value=2.0, name="nested", a=A(value=3.0, name="nested2", seed=42)))
-
-check_pydantic_model_compatibility(C)
-
-flat_d_of_c = pydantic_to_flat_dict(c, prefix_nested=True)
-c_from_flat_d = flat_dict_to_pydantic(C, flat_d_of_c, prefix_nested=True)
-assert c.model_dump() == c_from_flat_d.model_dump()
+    model_config = pydantic.ConfigDict(frozen=True, extra="ignore")
 
 
-class X(pydantic.BaseModel):
-    x: int
-    model_config = pydantic.ConfigDict(extra="ignore")
+flat_dict = {
+    "uid_gen_sig": "2f9ca4e6401715a9e181a6c92a3cfc9de8084206376eeda5eedd8d1fbf0b4ecf",
+    "decay_rate_hetero_theo": 1120.9329117430084,
+    "T_celsius": 16.0,
+    "generation_frequency": 1000000,
+    "T_total": 1.0,
+    "diameter": 1e-07,
+    "lambda_laser": 9.76e-07,
+    "n_medium": 1.33,
+    "variance_fluctuations": 1.0,
+    "offset": 0.0,
+    "seed": 1,
+    "v_min": -0.1,
+    "v_max": 0.1,
+    "n_levels": 65536,
+    "sampling_frequency": 50000,
+}
 
+params_acquisition = flat_dict_to_pydantic(ParamsAcquisition, flat_dict, prefix_nested=False)
 
-class Y(pydantic.BaseModel):
-    y: int
-    model_config = pydantic.ConfigDict(extra="ignore")
+print(params_acquisition)
 
-
-class Wrapper(pydantic.BaseModel):
-    x: X
-    y: Y
-    f: float
-
-    model_config = pydantic.ConfigDict(extra="ignore")
-
-
-wrapper_flat_dict = pydantic_to_flat_dict(Wrapper(x=X(x=10), y=Y(y=20), f=1.0))
-
-wrapper = flat_dict_to_pydantic(Wrapper, wrapper_flat_dict)
-
-print(wrapper)
+# %%
