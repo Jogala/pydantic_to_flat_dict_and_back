@@ -32,8 +32,11 @@ def pydantic_to_flat_dict(
     model_dict = model.model_dump()
 
     for field_name, field_value in model_dict.items():
+        # Get the field type from the model's fields
+        field_type = model.model_fields[field_name].annotation
+
         # If the field is another Pydantic model, recursively flatten it
-        if hasattr(model, field_name) and isinstance(getattr(model, field_name), pydantic.BaseModel):
+        if hasattr(field_type, "model_fields"):
             nested_model = getattr(model, field_name)
             # Recursively flatten the nested model
             nested_flat = pydantic_to_flat_dict(nested_model, prefix_nested, flat_dict)
@@ -82,10 +85,23 @@ def flat_dict_to_pydantic(
         )
 
     if not prefix_nested:
-        # Just pass the entire dict, Pydantic will pick what it needs
-        return model_cls(**flat_dict)
+        # For prefix_nested=False, we expect direct values in the flat dict
+        model_data = {}
+        for field_name, field_info in model_cls.model_fields.items():
+            field_type = field_info.annotation
+            if hasattr(field_type, "model_fields"):
+                # For nested models, create a dict with the field name as key
+                if field_name in flat_dict:
+                    # Create a dict with the field name as key for the nested model
+                    nested_dict = {field_name: flat_dict[field_name]}
+                    # Recursively reconstruct the nested model
+                    model_data[field_name] = field_type(**nested_dict)
+            else:
+                if field_name in flat_dict:
+                    model_data[field_name] = flat_dict[field_name]
+        return model_cls(**model_data)
 
-    # For prefix_nested=True, we still need some processing
+    # For prefix_nested=True, we need to handle prefixed values
     model_data = {}
     for field_name, field_info in model_cls.model_fields.items():
         field_type = field_info.annotation
